@@ -31,6 +31,7 @@ namespace VirtualInspection
         private Text _formError;
         private InputField _titleInput;
         private InputField _descriptionInput;
+        private Button _cancelButton;
         private Button _submitButton;
         private Text _submitButtonText;
         private Text _detailTitle;
@@ -94,6 +95,8 @@ namespace VirtualInspection
             _titleInput.text = string.Empty;
             _descriptionInput.text = string.Empty;
             SelectPriority("medium");
+            _cancelButton.targetGraphic.raycastTarget = true;
+            _submitButton.targetGraphic.raycastTarget = true;
             SetSubmitting(false);
             _formOverlay.SetActive(true);
             _detailOverlay.SetActive(false);
@@ -111,6 +114,7 @@ namespace VirtualInspection
         public void SetSubmitting(bool submitting)
         {
             _submitButton.interactable = !submitting;
+            _cancelButton.interactable = !submitting;
             _titleInput.interactable = !submitting;
             _descriptionInput.interactable = !submitting;
             foreach (var button in _priorityButtons.Values)
@@ -328,9 +332,9 @@ namespace VirtualInspection
             var divider = CreatePanel("Divider", card.transform, new Color(0.15f, 0.22f, 0.25f, 0.7f));
             Place(divider.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(32f, -492f), new Vector2(736f, 1f));
 
-            var cancel = CreateButton(card.transform, "取消填写", new Color(0.09f, 0.13f, 0.15f), new Color(0.72f, 0.8f, 0.83f));
-            Place(cancel.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(32f, 30f), new Vector2(170f, 46f));
-            cancel.onClick.AddListener(() => _onCancel?.Invoke());
+            _cancelButton = CreateButton(card.transform, "取消填写", new Color(0.09f, 0.13f, 0.15f), new Color(0.72f, 0.8f, 0.83f));
+            Place(_cancelButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(32f, 30f), new Vector2(170f, 46f));
+            _cancelButton.onClick.AddListener(() => _onCancel?.Invoke());
 
             _submitButton = CreateButton(card.transform, "提交问题", Accent, new Color(0.08f, 0.1f, 0.02f));
             Place(_submitButton.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-32f, 30f), new Vector2(190f, 46f));

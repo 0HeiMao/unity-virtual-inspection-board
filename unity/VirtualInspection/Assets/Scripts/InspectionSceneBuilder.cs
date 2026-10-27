@@ -177,13 +177,13 @@ namespace VirtualInspection
                 "A 区 · 设备巡检",
                 parent,
                 new Vector3(-6.5f, 5.35f, 6.86f),
-                Quaternion.Euler(0f, 180f, 0f),
+                Quaternion.identity,
                 0.085f);
             CreateWorldLabel(
                 "冷却系统",
                 parent,
                 new Vector3(5.25f, 5.15f, 6.86f),
-                Quaternion.Euler(0f, 180f, 0f),
+                Quaternion.identity,
                 0.06f);
         }
 

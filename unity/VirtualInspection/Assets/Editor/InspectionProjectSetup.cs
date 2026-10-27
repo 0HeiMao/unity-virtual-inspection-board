@@ -55,6 +55,11 @@ namespace VirtualInspection.Editor
                 scenes.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
                 EditorBuildSettings.scenes = scenes.ToArray();
             }
+
+            if (SceneManager.GetActiveScene().path == string.Empty)
+            {
+                EditorSceneManager.OpenScene(ScenePath);
+            }
         }
     }
 }

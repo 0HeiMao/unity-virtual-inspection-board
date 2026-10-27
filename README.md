@@ -19,7 +19,7 @@ Unity 虚拟现场
 
 | 部分 | 版本 |
 |---|---|
-| Unity | 2022.3.44f1 LTS |
+| Unity | 2022.3.44f1c1 LTS（Unity China 发行版） |
 | Go | 1.23.4；源码兼容 Go 1.22+ |
 | Node.js | 24.13.1 |
 | React / React DOM | 19.3.1 |
@@ -35,6 +35,7 @@ Unity 只使用基础几何体和内置 UGUI，不依赖付费资源。为显示
 ├── unity/VirtualInspection/   Unity 客户端
 ├── backend/                   Go API 与 JSON 持久化
 ├── frontend/                  React + TypeScript 管理端
+├── demos/                     两段演示视频与字幕
 ├── README.md
 └── AI_LOG.md
 ```
@@ -85,6 +86,8 @@ Go 服务会返回 CORS 响应头，允许 React 页面直接访问 API。
 2. 在 Unity Hub 中选择“Add project from disk”，打开 `unity/VirtualInspection`。
 3. 等待首次导入完成，打开 `Assets/Scenes/InspectionScene.unity`。
 4. 保持 Go 后端运行，点击 Play。
+
+![Unity 虚拟巡检 Play Mode](docs/screenshots/unity-playmode.png)
 
 场景也可以通过菜单 `Virtual Inspection > Open Inspection Scene` 重新打开。
 
@@ -190,6 +193,15 @@ $env:INSPECTION_API_URL = "http://127.0.0.1:8080/api"
 - Go 校验空标题、枚举错误、字符数和不存在的问题；
 - Go 使用临时文件替换方式保存 JSON，重启后数据仍存在。
 
+## 演示视频
+
+| 演示 | 时长 | 内容 |
+|---|---|---|
+| [01-unity-playmode.mp4](demos/01-unity-playmode.mp4) | 3 分 20 秒 | Unity Play Mode、移动和转向、射线命中、标记、空标题校验、取消、填写并提交 |
+| [02-react-management.mp4](demos/02-react-management.mp4) | 3 分 15 秒 | React 刷新、修改状态、Go 停止错误提示、Go 重启后持久化、改为已解决 |
+
+两段视频均为 H.264、30 FPS，并带有中文步骤字幕。对应字幕文件位于 `demos/*.srt`。
+
 ## 测试
 
 ### Go
@@ -227,18 +239,18 @@ npm run build
 - `go test ./...`：全部通过；
 - `npm test`：问题加载、状态更新和后端不可用错误态共 2 项测试通过；
 - `npm run build`：TypeScript 类型检查与 Vite 生产构建通过。
-- Unity 运行时代码已使用 Unity 2021.3 模块引用和 UGUI 引用完成 C# 静态编译检查；这不能替代 Unity 2022.3 Editor 的实际导入与场景验证。
+- Unity 2022.3.44f1c1 已实际打开工程、完成脚本编译并进入 Play Mode；
+- Unity 已实际完成射线命中、表单校验、取消清理、问题提交、已保存标记恢复和标记详情；
+- 已录制并抽帧检查两段 3～5 分钟演示视频。
 
 ## 未完成与已知问题
 
-- 当前开发机器未完成已授权 Unity Editor 的打开和 Play Mode 验证，因此尚未确认场景视觉表现与实际输入操作；
-- 题目要求的两段 3～5 分钟演示视频尚未录制；
 - 本项目按无 AR 设备版实现，没有引入 AR Foundation 或 XR Simulation；
 - Unity 使用固定虚拟场景坐标，不包含真实空间锚点；
 - JSON 文件持久化适合单实例本地运行，不适合多实例并发部署；
 - Unity 默认面向 Windows 桌面运行，未制作独立安装包。
 
-在录制演示和提交评审前，必须先在已授权 Unity Editor 中打开工程、确认 Console 无编译错误，并完成一次从 Unity 上报到 React 修改状态、再重启 Go 验证持久化的完整演示。
+仓库内 `backend/data/issues.json` 保留了演示时生成的 5 条问题记录，便于评审打开后直接看到数据。若需要空库，将文件内容改为 `[]` 后重启 Go 服务即可。
 
 ## AR 基础理解
 

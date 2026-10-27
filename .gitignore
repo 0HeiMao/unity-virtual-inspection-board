@@ -38,6 +38,9 @@ npm-debug.log*
 # Local toolchain
 .tools/
 
+# Intermediate demo captures
+demos/*-raw.*
+
 # Go binaries and temporary persistence files
 backend/server.exe
 backend/backend.exe
