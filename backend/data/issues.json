@@ -1,0 +1,44 @@
+[
+  {
+    "id": "082717b0-de52-4b71-9ef6-eb8d0202d6be",
+    "title": "1 号机柜温度异常",
+    "description": "机柜右侧温度明显偏高，面板指示灯闪烁。",
+    "priority": "high",
+    "status": "open",
+    "position": {
+      "x": 1.25,
+      "y": 1.48,
+      "z": 3.9
+    },
+    "createdAt": "2026-10-27T09:39:37.5591585Z",
+    "updatedAt": "2026-10-27T09:39:37.5591585Z"
+  },
+  {
+    "id": "6c3a0769-48fd-426a-a5a8-8b64dde63092",
+    "title": "冷却管线接口渗水",
+    "description": "北侧管线下方出现少量水迹，建议尽快检查密封圈。",
+    "priority": "medium",
+    "status": "in_progress",
+    "position": {
+      "x": -2.1,
+      "y": 4.55,
+      "z": 6.55
+    },
+    "createdAt": "2026-10-27T09:39:37.576125Z",
+    "updatedAt": "2026-10-27T09:39:37.5887483Z"
+  },
+  {
+    "id": "0a1ec67b-99dc-4594-ba6c-c518ae402700",
+    "title": "控制台线缆未整理",
+    "description": "控制台下方线缆交叉，需要按区域重新绑扎。",
+    "priority": "low",
+    "status": "open",
+    "position": {
+      "x": -0.85,
+      "y": 0.55,
+      "z": -1.1
+    },
+    "createdAt": "2026-10-27T09:39:37.5810097Z",
+    "updatedAt": "2026-10-27T09:39:37.5810097Z"
+  }
+]
