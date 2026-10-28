@@ -392,7 +392,59 @@ main {
   display: flex;
   align-items: end;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 20px;
+}
+
+.board-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.view-tabs {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  background: rgba(15, 23, 30, 0.66);
+  padding: 3px;
+  border-radius: 5px;
+}
+
+.view-tabs button {
+  min-height: 32px;
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  transition: 160ms ease;
+}
+
+.view-tabs button:hover {
+  color: var(--text);
+}
+
+.view-tabs button.is-active {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.archived-note {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+.issue-card.is-archived {
+  opacity: 0.82;
+}
+
+.issue-card.is-archived .issue-side {
+  justify-items: stretch;
 }
 
 .board h2 {
@@ -409,7 +461,7 @@ main {
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(230px, 1fr) 180px 180px;
+  grid-template-columns: minmax(190px, 1fr) 152px 152px 152px;
   gap: 12px;
   padding: 14px;
   margin-bottom: 12px;
@@ -423,6 +475,7 @@ main {
   gap: 10px;
   color: var(--muted);
   font-size: 0.73rem;
+  white-space: nowrap;
 }
 
 .filters select,
@@ -536,6 +589,18 @@ main {
   font-weight: 650;
 }
 
+.issue-tags .zone {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
 .priority-high {
   color: #ff968d;
 }
@@ -638,6 +703,58 @@ main {
 
 .status-control {
   align-self: center;
+}
+
+.issue-side {
+  align-self: center;
+  display: grid;
+  gap: 10px;
+  justify-items: stretch;
+}
+
+.issue-asset {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.link-danger {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger);
+  font-size: 0.72rem;
+  text-align: right;
+  cursor: pointer;
+}
+
+.link-danger:hover {
+  text-decoration: underline;
+}
+
+.delete-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 107, 95, 0.28);
+  border-radius: 3px;
+  background: rgba(255, 107, 95, 0.06);
+}
+
+.delete-confirm span {
+  color: #ffb9b3;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.delete-confirm .button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 0.72rem;
 }
 
 .status-control > span {

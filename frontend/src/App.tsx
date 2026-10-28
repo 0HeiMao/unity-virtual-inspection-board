@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ApiError, fetchIssues, updateIssueStatus } from './api'
+import {
+  ApiError,
+  deleteIssue,
+  fetchIssues,
+  restoreIssue,
+  updateIssueStatus,
+} from './api'
 import type { Issue, IssueStatus, Priority } from './types'
 
 const statusOptions: Array<{ value: IssueStatus; label: string }> = [
@@ -35,14 +41,73 @@ function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : '发生未知错误，请稍后重试'
 }
 
+const csvColumns: Array<{ key: string; label: string; value: (issue: Issue) => string }> = [
+  { key: 'id', label: '问题ID', value: (issue) => issue.id },
+  { key: 'title', label: '标题', value: (issue) => issue.title },
+  { key: 'description', label: '描述', value: (issue) => issue.description },
+  { key: 'priority', label: '优先级', value: (issue) => priorityLabels[issue.priority] },
+  { key: 'status', label: '状态', value: (issue) => statusLabels[issue.status] },
+  { key: 'area', label: '区域', value: (issue) => issue.area },
+  { key: 'asset', label: '设备', value: (issue) => issue.asset },
+  { key: 'x', label: 'X', value: (issue) => issue.position.x.toFixed(2) },
+  { key: 'y', label: 'Y', value: (issue) => issue.position.y.toFixed(2) },
+  { key: 'z', label: 'Z', value: (issue) => issue.position.z.toFixed(2) },
+  { key: 'createdAt', label: '上报时间', value: (issue) => issue.createdAt },
+  { key: 'updatedAt', label: '更新时间', value: (issue) => issue.updatedAt },
+  {
+    key: 'deletedAt',
+    label: '归档时间',
+    value: (issue) => issue.deletedAt ?? '',
+  },
+]
+
+/** CSV 单元格转义：引号翻倍，含逗号/引号/换行时整体加引号。 */
+function csvCell(value: string) {
+  const text = value ?? ''
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function buildCsv(rows: Issue[]) {
+  const header = csvColumns.map((column) => csvCell(column.label)).join(',')
+  const body = rows.map((issue) =>
+    csvColumns.map((column) => csvCell(column.value(issue))).join(','),
+  )
+  // BOM 让 Excel 直接按 UTF-8 打开，不会把中文显示成乱码。
+  return `\uFEFF${[header, ...body].join('\r\n')}\r\n`
+}
+
+function downloadCsv(rows: Issue[]) {
+  const stamp = new Date()
+    .toISOString()
+    .slice(0, 16)
+    .replace(/[:T-]/g, '')
+  const blob = new Blob([buildCsv(rows)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `巡检问题-${stamp}.csv`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 function App() {
+  const [view, setView] = useState<'active' | 'deleted'>('active')
   const [issues, setIssues] = useState<Issue[]>([])
+  const [archived, setArchived] = useState<Issue[]>([])
+  const [archivedLoaded, setArchivedLoaded] = useState(false)
+  const [archivedLoading, setArchivedLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [updatingId, setUpdatingId] = useState('')
+  const [deletingId, setDeletingId] = useState('')
+  const [restoringId, setRestoringId] = useState('')
+  const [confirmingId, setConfirmingId] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | IssueStatus>('all')
   const [priorityFilter, setPriorityFilter] = useState<'all' | Priority>('all')
+  const [areaFilter, setAreaFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
@@ -59,9 +124,30 @@ function App() {
     }
   }, [])
 
+  const loadArchived = useCallback(async () => {
+    setArchivedLoading(true)
+    setError('')
+    try {
+      setArchived(await fetchIssues('deleted'))
+      setArchivedLoaded(true)
+      setLastUpdated(new Date())
+    } catch (loadError) {
+      setError(errorMessage(loadError))
+    } finally {
+      setArchivedLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     void loadIssues()
   }, [loadIssues])
+
+  // 回收站按需加载：只有切到该视图且还没加载过时才请求，避免首屏多打一次接口。
+  useEffect(() => {
+    if (view === 'deleted' && !archivedLoaded && !archivedLoading) {
+      void loadArchived()
+    }
+  }, [archivedLoading, archivedLoaded, loadArchived, view])
 
   const onUpdateStatus = async (issue: Issue, status: IssueStatus) => {
     setUpdatingId(issue.id)
@@ -80,6 +166,44 @@ function App() {
     }
   }
 
+  const onDeleteIssue = async (issue: Issue) => {
+    setDeletingId(issue.id)
+    setError('')
+    setNotice('')
+    try {
+      await deleteIssue(issue.id)
+      setIssues((current) => current.filter((item) => item.id !== issue.id))
+      setArchivedLoaded(false)
+      setNotice(`“${issue.title}”已移入回收站，可在回收站恢复`)
+    } catch (deleteError) {
+      setError(`删除失败：${errorMessage(deleteError)}`)
+    } finally {
+      setDeletingId('')
+      setConfirmingId('')
+    }
+  }
+
+  const onRestoreIssue = async (issue: Issue) => {
+    setRestoringId(issue.id)
+    setError('')
+    setNotice('')
+    try {
+      const restored = await restoreIssue(issue.id)
+      setArchived((current) => current.filter((item) => item.id !== issue.id))
+      setIssues((current) => [
+        { ...restored, deletedAt: undefined },
+        ...current.filter((item) => item.id !== restored.id),
+      ])
+      setNotice(`“${issue.title}”已恢复到巡检队列`)
+    } catch (restoreError) {
+      setError(`恢复失败：${errorMessage(restoreError)}`)
+    } finally {
+      setRestoringId('')
+    }
+  }
+
+  const visibleIssues = view === 'deleted' ? archived : issues
+
   const counts = useMemo(
     () => ({
       total: issues.length,
@@ -90,20 +214,36 @@ function App() {
     [issues],
   )
 
+  const areas = useMemo(() => {
+    const unique = new Set(visibleIssues.map((issue) => issue.area).filter(Boolean))
+    return [...unique].sort((left, right) => left.localeCompare(right, 'zh-CN'))
+  }, [visibleIssues])
+
   const filteredIssues = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('zh-CN')
-    return issues.filter((issue) => {
+    return visibleIssues.filter((issue) => {
       const matchesStatus =
         statusFilter === 'all' || issue.status === statusFilter
       const matchesPriority =
         priorityFilter === 'all' || issue.priority === priorityFilter
+      const matchesArea = areaFilter === 'all' || issue.area === areaFilter
       const matchesSearch =
         !keyword ||
         issue.title.toLocaleLowerCase('zh-CN').includes(keyword) ||
-        issue.description.toLocaleLowerCase('zh-CN').includes(keyword)
-      return matchesStatus && matchesPriority && matchesSearch
+        issue.description.toLocaleLowerCase('zh-CN').includes(keyword) ||
+        issue.area.toLocaleLowerCase('zh-CN').includes(keyword) ||
+        issue.asset.toLocaleLowerCase('zh-CN').includes(keyword)
+      return matchesStatus && matchesPriority && matchesArea && matchesSearch
     })
-  }, [issues, priorityFilter, search, statusFilter])
+  }, [areaFilter, priorityFilter, search, statusFilter, visibleIssues])
+
+  const exportRows = () => {
+    if (filteredIssues.length === 0) {
+      return
+    }
+    downloadCsv(filteredIssues)
+    setNotice(`已导出 ${filteredIssues.length} 条记录为 CSV`)
+  }
 
   return (
     <div className="app-shell">
@@ -205,9 +345,36 @@ function App() {
           <div className="board-heading">
             <div>
               <p className="section-kicker">ISSUE QUEUE</p>
-              <h2>问题队列</h2>
+              <h2>{view === 'deleted' ? '回收站' : '问题队列'}</h2>
             </div>
-            <span className="result-count">{filteredIssues.length} 条记录</span>
+            <div className="board-actions">
+              <div className="view-tabs" role="tablist" aria-label="问题视图">
+                <button
+                  role="tab"
+                  aria-selected={view === 'active'}
+                  className={view === 'active' ? 'is-active' : ''}
+                  onClick={() => setView('active')}
+                >
+                  巡检队列
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={view === 'deleted'}
+                  className={view === 'deleted' ? 'is-active' : ''}
+                  onClick={() => setView('deleted')}
+                >
+                  回收站
+                </button>
+              </div>
+              <button
+                className="button button-secondary"
+                onClick={exportRows}
+                disabled={filteredIssues.length === 0}
+              >
+                导出 CSV
+              </button>
+              <span className="result-count">{filteredIssues.length} 条记录</span>
+            </div>
           </div>
 
           <div className="filters">
@@ -251,9 +418,24 @@ function App() {
                 <option value="low">低</option>
               </select>
             </label>
+            <label>
+              <span>区域</span>
+              <select
+                value={areaFilter}
+                onChange={(event) => setAreaFilter(event.target.value)}
+                aria-label="按区域筛选"
+              >
+                <option value="all">全部区域</option>
+                {areas.map((area) => (
+                  <option key={area} value={area}>
+                    {area}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          {loading && issues.length === 0 ? (
+          {(view === 'deleted' ? archivedLoading : loading) && visibleIssues.length === 0 ? (
             <div className="issue-list" aria-label="正在加载">
               {[0, 1, 2].map((item) => (
                 <div className="issue-card skeleton" key={item}>
@@ -266,7 +448,12 @@ function App() {
           ) : filteredIssues.length > 0 ? (
             <div className="issue-list">
               {filteredIssues.map((issue) => (
-                <article className={`issue-card priority-${issue.priority}`} key={issue.id}>
+                <article
+                  className={`issue-card priority-${issue.priority}${
+                    view === 'deleted' ? ' is-archived' : ''
+                  }`}
+                  key={issue.id}
+                >
                   <div className="priority-rail" aria-hidden="true" />
                   <div className="issue-main">
                     <div className="issue-title-row">
@@ -277,6 +464,9 @@ function App() {
                           </span>
                           <span className={`status status-${issue.status}`}>
                             {statusLabels[issue.status]}
+                          </span>
+                          <span className="zone">
+                            {issue.area || '未归属区域'}
                           </span>
                         </div>
                         <h3>{issue.title}</h3>
@@ -294,33 +484,84 @@ function App() {
                         <i />
                         Z {issue.position.z.toFixed(2)}
                       </code>
+                      <span className="issue-asset">
+                        {issue.asset ? `设备 · ${issue.asset}` : '设备未登记'}
+                      </span>
                       <span className="issue-id">#{issue.id.slice(0, 8)}</span>
                     </div>
                   </div>
-                  <label className="status-control">
-                    <span>处理状态</span>
-                    <div className="select-wrap">
-                      <select
-                        value={issue.status}
-                        disabled={updatingId === issue.id}
-                        onChange={(event) =>
-                          void onUpdateStatus(
-                            issue,
-                            event.target.value as IssueStatus,
-                          )
-                        }
-                        aria-label={`修改“${issue.title}”的处理状态`}
-                      >
-                        {statusOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronIcon />
-                    </div>
-                    {updatingId === issue.id && <small>正在保存...</small>}
-                  </label>
+                  <div className="issue-side">
+                    {view === 'deleted' ? (
+                      <>
+                        <span className="archived-note">
+                          归档于 {formatDate(issue.deletedAt ?? issue.updatedAt)}
+                        </span>
+                        <button
+                          className="button button-secondary"
+                          disabled={restoringId === issue.id}
+                          onClick={() => void onRestoreIssue(issue)}
+                          aria-label={`恢复“${issue.title}”`}
+                        >
+                          {restoringId === issue.id ? '恢复中...' : '恢复到队列'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <label className="status-control">
+                          <span>处理状态</span>
+                          <div className="select-wrap">
+                            <select
+                              value={issue.status}
+                              disabled={updatingId === issue.id}
+                              onChange={(event) =>
+                                void onUpdateStatus(
+                                  issue,
+                                  event.target.value as IssueStatus,
+                                )
+                              }
+                              aria-label={`修改“${issue.title}”的处理状态`}
+                            >
+                              {statusOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronIcon />
+                          </div>
+                          {updatingId === issue.id && <small>正在保存...</small>}
+                        </label>
+                        {confirmingId === issue.id ? (
+                          <div className="delete-confirm">
+                            <span>移入回收站后可恢复，确认删除？</span>
+                            <div className="delete-confirm-actions">
+                              <button
+                                className="button button-danger"
+                                disabled={deletingId === issue.id}
+                                onClick={() => void onDeleteIssue(issue)}
+                              >
+                                {deletingId === issue.id ? '删除中...' : '确认删除'}
+                              </button>
+                              <button
+                                className="button button-secondary"
+                                onClick={() => setConfirmingId('')}
+                              >
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            className="link-danger"
+                            onClick={() => setConfirmingId(issue.id)}
+                            aria-label={`删除“${issue.title}”`}
+                          >
+                            删除
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>
@@ -329,10 +570,18 @@ function App() {
               <div className="empty-icon" aria-hidden="true">
                 <ScanIcon />
               </div>
-              <h3>{issues.length === 0 ? '还没有巡检问题' : '没有符合筛选条件的记录'}</h3>
+              <h3>
+                {visibleIssues.length === 0
+                  ? view === 'deleted'
+                    ? '回收站是空的'
+                    : '还没有巡检问题'
+                  : '没有符合筛选条件的记录'}
+              </h3>
               <p>
-                {issues.length === 0
-                  ? '在 Unity 虚拟现场中点击设备或地面，即可创建第一条问题记录。'
+                {visibleIssues.length === 0
+                  ? view === 'deleted'
+                    ? '在巡检队列里删除的问题会先进入回收站，可以在这里恢复到队列。'
+                    : '在 Unity 虚拟现场中点击设备或地面，即可创建第一条问题记录。'
                   : '调整上方筛选条件后重试。'}
               </p>
             </div>
