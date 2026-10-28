@@ -339,3 +339,104 @@
 - 实际获得许可证 entitlements，Unity 批处理导入返回 `EXIT_CODE=0`。
 - 验证中曾因自动化鼠标坐标换算错误误判底部按钮不可点击，通过临时射线诊断确认按钮可点击；随后移除诊断日志并重新验证。
 - 完成 Play Mode 端到端上报、React 状态更新、Go 停止/重启持久化和两段视频录制。
+
+## P-010
+
+- 目标：把验收报告里指出的低风险问题修掉，但不碰功能主干。
+
+### Prompt 原文
+
+> 先做第 2~5 条的小修（都只动 README / api.ts / 标记层，风险很低）
+
+### 结果
+
+- 采用。
+- `frontend/src/api.ts` 的 `fetchIssues` 不再在响应缺少 `issues` 数组时静默返回空列表，改为抛 `ApiError('后端返回格式异常：响应中缺少 issues 数组')`；为此补了一条回归测试，并给 `frontend/src/test/setup.ts` 显式加 `afterEach(cleanup)`——本项目 `vite.config.ts` 没开 `test.globals`，React Testing Library 的自动清理不生效，新用例曾因上一条用例的 alert 残留而失败。
+- 标记层改为内置 `Ignore Raycast` 层 + `MarkerMask` / `SurfaceMask`：`InspectionApp.TryInspectAtPointer()` 先对标记层射线判断"是否点中已保存标记"，再对表面层射线取落点，解决了标记球体挡住身后表面落点的问题。
+- 验证：`npx tsc --noEmit` 通过；`npm test` 3 项通过；`npm run build` 通过。Unity 侧改动没有 Editor 批处理可用，改用 Unity 自带 Roslyn（`Editor\Data\NetCoreRuntime\dotnet.exe` + `DotNetSdkRoslyn\csc.dll`）手工拼装引用编译 `Assets\Scripts` 下 13 个 runtime 脚本，退出码 0。
+- 过程中踩到的问题：引 `Data\Managed\UnityEditor.dll` 会与 `Managed\UnityEngine\UnityEditor.CoreModule.dll` 触发 `CS0433`（`InitializeOnLoadAttribute`/`MenuItem` 重复定义），最终只引 CoreModule 一侧才编过。
+
+## P-011
+
+- 目标：在必做功能都完成的前提下，挑出值得做的加分项。
+
+### Prompt 原文
+
+> 有没有可以做的加分项
+
+### 结果
+
+- 采用。
+- 先只读核查现状（有哪些接口、字段、Dockerfile、测试目录），再给候选清单，没有直接开工；用户随后选择"区域归属 + 删除 + Docker Compose"这一组。
+- 候选项里"AR Foundation XR Simulation"与"GitHub Actions CI"未进入最终范围，README 的已知问题里如实记了这一点。
+
+## P-012
+
+- 目标：把选定的三项加分项做完整（含文档与数据回填）。
+
+### Prompt 原文
+
+> （说明：这条是用户在候选清单里做出选择的回复，逐字文本未在本轮记录中保留，实际内容是选定"区域归属 + 删除 + Docker Compose"这一组，其余候选不做。）
+
+### 结果
+
+- 修改后采用。
+- Go 侧：`model.Issue` / `CreateIssueRequest` 增加 `area`、`asset`（各限 64 字符，`Normalize` 里 TrimSpace），`JSONStore` 增加 `Delete`（保存失败回滚内存切片），路由增加 `DELETE /api/issues/{id}`（成功 204、未知 ID 404），CORS 允许方法补 `DELETE`；新增 `TestCreateKeepsOwnershipAndDeleteRemovesIssue`，并在参数校验用例里加 65 字 `area` 的 400 断言。
+- React 侧：新增区域筛选、卡片区域徽标与设备名、删除二次确认（先点"删除"只展开确认框，不发请求；确认后才 `DELETE`），并为删除流程补了断言"第一次点击不应产生请求"的测试。
+- Unity 侧：`InspectableSurface` 增加区域字段，场景里每台设备/表面带上 `A 区 · 设备巡检`、`B 区 · 冷却系统`，命中时把区域和设备名一起提交。
+- Docker：新增 `deploy/Dockerfile.backend`（多阶段 + 非 root + `HEALTHCHECK`）、`deploy/Dockerfile.frontend`（Vite 构建 + nginx）、`deploy/nginx.conf`（`/api`、`/health` 反向代理 + SPA 回落）、`docker-compose.yml`（数据落命名卷）。
+- 验证：`go vet ./...` 与 `go test ./...` 全绿；`npx tsc --noEmit`、`npm test`（4 项）、`npm run build` 通过；`docker compose config` 解析通过（本机 Docker 守护进程未运行，未实际构建镜像，README 已注明）；用 Unity 自带 Roslyn 对 13 个 runtime 脚本重新编译，退出码 0。
+- 界面用无头 Edge 加载构建产物截图核对：区域徽标、设备名、区域筛选、删除入口都按预期渲染。
+
+
+## P-013
+
+- 目标：在必做功能和第一轮加分项之后，再补一轮直接服务现场巡检的扩展（回收站、导出、标记按优先级区分）。
+
+### Prompt 原文
+
+> ②⑤ + ③
+
+（这是用户在加分项候选清单上给出的选择：② = 优先级影响标记形态，⑤ = CSV 导出，③ = 软删除 / 归档。）
+
+### 结果
+
+- 修改后采用。三项都实现，但对用户的原始表述做了两处具体化：
+  - ③  - ③ 做成"软删除 + 回收站 + 恢复"，而不是直接物理删除；同时规定已归档的问题不能再改状态，避免出现"归档了还能改状态"的矛盾。
+  - ② 不只用颜色区分优先级（色弱用户分不出红/黄），而是用"尺寸 + 立柱高度 + 光晕 + 脉动节奏"四个维度一起编码。
+  - ⑤ CSV 导出当前筛选结果，带 UTF-8 BOM，Excel 打开不乱码；逗号、引号、换行按 RFC 4180 转义。
+
+### 实现要点
+
+- Go：`Issue.DeletedAt` + `GET /api/issues?deleted=1` 过滤 + `POST /api/issues/{id}/restore`；`Delete` 从物理删除改成打时间戳；`UpdateStatus` 遇到已归档记录返回 `ErrNotFound`，接口层转 404。
+- React：「巡检队列 / 回收站」两个页签（回收站惰性加载，不拖慢首屏）、恢复按钮、CSV 导出（文件名带时间戳）。
+- Unity：`IssueMarkerFactory` 按 `priority` 决定头部缩放、立柱高度、是否加一层半透明光晕和脉动参数；`MarkerPulse.Configure(amplitude, speed)` 让同一个组件支持不同节奏，默认值保持原有观感。
+
+### 验证
+
+- `go vet ./...`、`go test ./...` 全绿（含软删除、回收站列表、恢复、已归档禁止改状态）。
+- 真实进程级联调：创建 → `DELETE` 204 → 默认列表消失 → `?deleted=1` 可见且带 `deletedAt` → 归档态改状态 404 → `restore` 200 → 回到队列。
+- `npx tsc --noEmit`、`npm test`（6 项）、`npm run build` 通过。
+- Unity 侧用 Roslyn 重新编译 13 个 runtime 脚本，退出码 0。
+- 回收站截图用的是真实记录（把"控制台线缆未整理"临时删除、截完再恢复），没有造假数据。
+
+### 自查修正
+
+- CSV 测试最初用 `blob.text()` 断言 BOM，但 `text()` 会把 BOM 吃掉，改成 `arrayBuffer()` 读前三字节 `EF BB BF`。
+- 测试里的 mock 分支最初写成 `url === '/api/issues'`，导致恢复请求落到默认分支返回空列表，改成按 `url.endsWith('/restore')` 判断。
+
+## P-014
+
+- 目标：在真机 AR 不可用的情况下，用 AR Foundation XR Simulation 做一版"AR 形态"的巡检客户端，证明同一套交互可以迁移到真 AR。
+
+### Prompt 原文
+
+> （说明：这一轮工作在上一段会话里完成，逐字 prompt 未保留；实际诉求是"做一个 ARSimulation 场景，能检测平面、点击平面放标记、提交到同一个后端"。）
+
+### 结果
+
+- 采用，但明确标注为"仅在模拟环境验证"。
+- `Assets/Scenes/ARSimulationScene.unity` + `Assets/Scripts/ARInspectionApp.cs`：`ARSession` / `XR Origin` / `ARPlaneManager` 检测平面，`ARRaycastManager.Raycast` 取命中姿态，标记落在 `hit.pose.position`；`Assets/Editor/ARSimulationProjectSetup.cs` 提供一键配置菜单。
+- 与桌面版共用 `InspectionApiClient`、`RuntimeUI` 和同一个 Go 后端；上报时 `area` / `asset` 填 `AR 模拟场地` / `已检测平面`。
+- 验证：在 XR Simulation 里实跑，界面显示 "Tracking 正常 · 平面 2 · 历史 5"，点击平面能放标记、填表提交、详情能打开；截图见 `docs/screenshots/ar-simulation.png`。
+- 坦白说明：没有真机，也没做空间锚点持久化；README 的已知问题里写了"只在模拟环境验证过"。
