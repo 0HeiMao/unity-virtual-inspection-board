@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -16,6 +16,8 @@ namespace VirtualInspection
         private Transform _markerRoot;
         private GameObject _pendingMarker;
         private IssuePosition _pendingPosition;
+        private string _pendingArea = string.Empty;
+        private string _pendingAsset = string.Empty;
         private int _savedIssueCount;
         private bool _submitting;
 
@@ -56,7 +58,7 @@ namespace VirtualInspection
 
             if (!_ui.ModalOpen &&
                 !_submitting &&
-                Input.GetMouseButtonDown(0) &&
+                Input.GetMouseButtonUp(0) &&
                 (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
             {
                 TryInspectAtPointer();
@@ -71,23 +73,31 @@ namespace VirtualInspection
             }
 
             var ray = _camera.ScreenPointToRay(Input.mousePosition);
-            if (!Physics.Raycast(ray, out var hit, RayDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+
+            // 两段式检测：标记在 Ignore Raycast 层，与表面层互不干扰。
+            // 这样已有标记不会挡住其身后表面的落点，远处的标记也不会抢走近处表面的点击。
+            var markerHitFound = Physics.Raycast(ray, out var markerHit, RayDistance, IssueMarkerFactory.MarkerMask, QueryTriggerInteraction.Ignore);
+            var surfaceHitFound = Physics.Raycast(ray, out var surfaceHit, RayDistance, IssueMarkerFactory.SurfaceMask, QueryTriggerInteraction.Ignore);
+
+            if (markerHitFound && (!surfaceHitFound || markerHit.distance <= surfaceHit.distance))
+            {
+                var marker = markerHit.collider.GetComponentInParent<IssueMarker>();
+                if (marker != null && marker.Issue != null)
+                {
+                    _ui.ShowDetails(marker.Issue);
+                    return;
+                }
+
+                // 点到的是待提交标记：忽略它，继续按它身后的表面处理，下方会给出待提交提示
+            }
+
+            if (!surfaceHitFound)
             {
                 _ui.ShowToast("未命中可巡检表面，请瞄准设备或地面", ToastKind.Info);
                 return;
             }
 
-            var marker = hit.collider.GetComponentInParent<IssueMarker>();
-            if (marker != null)
-            {
-                if (marker.Issue != null)
-                {
-                    _ui.ShowDetails(marker.Issue);
-                }
-                return;
-            }
-
-            var surface = hit.collider.GetComponentInParent<InspectableSurface>();
+            var surface = surfaceHit.collider.GetComponentInParent<InspectableSurface>();
             if (surface == null)
             {
                 return;
@@ -99,9 +109,11 @@ namespace VirtualInspection
                 return;
             }
 
-            _pendingPosition = IssuePosition.FromWorld(hit.point);
-            _pendingMarker = CreateMarker(hit.point, null, true);
-            _ui.ShowForm(surface.DisplayName, hit.point);
+            _pendingPosition = IssuePosition.FromWorld(surfaceHit.point);
+            _pendingArea = surface.AreaName;
+            _pendingAsset = surface.DisplayName;
+            _pendingMarker = IssueMarkerFactory.Create(_markerRoot, surfaceHit.point, null, true);
+            _ui.ShowForm(surface.DisplayName, surface.AreaName, surfaceHit.point);
         }
 
         private void SubmitIssue(string title, string description, string priority)
@@ -138,6 +150,8 @@ namespace VirtualInspection
                 title = title,
                 description = description,
                 priority = priority,
+                area = _pendingArea,
+                asset = _pendingAsset,
                 position = _pendingPosition
             };
             StartCoroutine(_api.CreateIssue(input, OnIssueCreated, OnCreateIssueFailed));
@@ -152,8 +166,10 @@ namespace VirtualInspection
                 _pendingMarker = null;
             }
             _pendingPosition = null;
+            _pendingArea = string.Empty;
+            _pendingAsset = string.Empty;
 
-            CreateMarker(created.position.ToWorld(), created, false);
+            IssueMarkerFactory.Create(_markerRoot, created.position.ToWorld(), created, false);
             _savedIssueCount++;
             _ui.CloseForm();
             UpdateBackendStatus(true);
@@ -180,6 +196,8 @@ namespace VirtualInspection
                 _pendingMarker = null;
             }
             _pendingPosition = null;
+            _pendingArea = string.Empty;
+            _pendingAsset = string.Empty;
             _ui.CloseForm();
             _ui.ShowToast("已取消填写，未保存标记已移除", ToastKind.Info);
         }
@@ -198,7 +216,7 @@ namespace VirtualInspection
                 {
                     continue;
                 }
-                CreateMarker(issue.position.ToWorld(), issue, false);
+                IssueMarkerFactory.Create(_markerRoot, issue.position.ToWorld(), issue, false);
                 _savedIssueCount++;
             }
             UpdateBackendStatus(true);
@@ -217,64 +235,6 @@ namespace VirtualInspection
                     ? $"问题服务已连接 · {_savedIssueCount} 个标记"
                     : "问题服务未连接 · 场景仍可浏览",
                 online);
-        }
-
-        private GameObject CreateMarker(Vector3 worldPosition, Issue issue, bool pending)
-        {
-            var root = new GameObject(pending ? "Pending Issue Marker" : $"Issue Marker - {issue.id}");
-            root.transform.SetParent(_markerRoot, false);
-            root.transform.position = worldPosition;
-
-            var marker = root.AddComponent<IssueMarker>();
-            if (pending)
-            {
-                marker.ConfigurePending();
-            }
-            else
-            {
-                marker.ConfigureSaved(issue);
-            }
-
-            var color = pending ? new Color(1f, 0.63f, 0.18f) : StatusColor(issue.status);
-            var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            sphere.name = "Marker Head";
-            sphere.transform.SetParent(root.transform, false);
-            sphere.transform.localPosition = new Vector3(0f, 0.18f, 0f);
-            sphere.transform.localScale = Vector3.one * (pending ? 0.28f : 0.22f);
-            sphere.GetComponent<Renderer>().sharedMaterial = CreateMarkerMaterial(color);
-            sphere.AddComponent<MarkerPulse>();
-
-            var stem = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            stem.name = "Marker Stem";
-            stem.transform.SetParent(root.transform, false);
-            stem.transform.localPosition = new Vector3(0f, -0.03f, 0f);
-            stem.transform.localScale = new Vector3(0.035f, 0.18f, 0.035f);
-            stem.GetComponent<Renderer>().sharedMaterial = CreateMarkerMaterial(color * 0.55f);
-            Destroy(stem.GetComponent<Collider>());
-
-            return root;
-        }
-
-        private static Material CreateMarkerMaterial(Color color)
-        {
-            var material = new Material(Shader.Find("Standard"))
-            {
-                color = color
-            };
-            material.EnableKeyword("_EMISSION");
-            material.SetColor("_EmissionColor", color * 1.5f);
-            return material;
-        }
-
-        private static Color StatusColor(string status)
-        {
-            return status switch
-            {
-                "open" => new Color(1f, 0.33f, 0.29f),
-                "in_progress" => new Color(1f, 0.68f, 0.21f),
-                "resolved" => new Color(0.25f, 0.88f, 0.64f),
-                _ => new Color(0.65f, 0.75f, 0.8f)
-            };
         }
 
         private void EnsureEventSystem()

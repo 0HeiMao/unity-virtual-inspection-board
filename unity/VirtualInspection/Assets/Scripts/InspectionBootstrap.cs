@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace VirtualInspection
 {
@@ -7,7 +8,8 @@ namespace VirtualInspection
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void StartApplication()
         {
-            if (Object.FindObjectOfType<InspectionApp>() != null)
+            if (SceneManager.GetActiveScene().name == "ARSimulationScene" ||
+                Object.FindObjectOfType<InspectionApp>() != null)
             {
                 return;
             }

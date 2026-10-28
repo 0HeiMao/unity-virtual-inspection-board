@@ -34,6 +34,8 @@ namespace VirtualInspection
         public string description;
         public string priority;
         public string status;
+        public string area;
+        public string asset;
         public IssuePosition position;
         public string createdAt;
         public string updatedAt;
@@ -45,6 +47,8 @@ namespace VirtualInspection
         public string title;
         public string description;
         public string priority;
+        public string area;
+        public string asset;
         public IssuePosition position;
     }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -21,6 +21,8 @@ namespace VirtualInspection
 
         private Text _backendStatus;
         private Image _backendDot;
+        private Text _subtitle;
+        private Text _controls;
         private GameObject _formOverlay;
         private GameObject _detailOverlay;
         private GameObject _toast;
@@ -87,9 +89,16 @@ namespace VirtualInspection
             _backendDot.color = online ? Success : Danger;
         }
 
-        public void ShowForm(string surfaceName, Vector3 position)
+        public void SetHudCopy(string subtitle, string controls)
         {
-            _formSurface.text = $"{surfaceName} · 点击位置已创建待提交标记";
+            _subtitle.text = subtitle;
+            _controls.text = controls;
+        }
+
+        public void ShowForm(string surfaceName, string areaName, Vector3 position)
+        {
+            var areaText = string.IsNullOrWhiteSpace(areaName) ? "未归属区域" : areaName.Trim();
+            _formSurface.text = $"{areaText} · {surfaceName} · 待提交标记已创建";
             _formCoordinates.text = FormatPosition(position);
             _formError.text = string.Empty;
             _titleInput.text = string.Empty;
@@ -147,7 +156,9 @@ namespace VirtualInspection
             _detailCoordinates.text = issue.position == null
                 ? "坐标不可用"
                 : $"命中坐标  {FormatPosition(issue.position.ToWorld())}";
-            _detailMetadata.text = $"ID  {issue.id}\n上报  {FormatTime(issue.createdAt)}    更新  {FormatTime(issue.updatedAt)}";
+            var ownership = string.IsNullOrWhiteSpace(issue.area) ? "未归属区域" : issue.area;
+            var assetName = string.IsNullOrWhiteSpace(issue.asset) ? "未登记设备" : issue.asset;
+            _detailMetadata.text = $"{ownership} · 设备 {assetName}\nID  {issue.id}\n上报  {FormatTime(issue.createdAt)}    更新  {FormatTime(issue.updatedAt)}";
             _detailOverlay.SetActive(true);
             _formOverlay.SetActive(false);
         }
@@ -209,14 +220,14 @@ namespace VirtualInspection
                 FontStyle.Bold);
             Place(title.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(46f, -18f), new Vector2(650f, 42f));
 
-            var subtitle = CreateText(
+            _subtitle = CreateText(
                 header.transform,
                 "Subtitle",
                 "发现问题后点击设备或场景表面，在命中位置创建标记。",
                 16,
                 Muted,
                 TextAnchor.MiddleLeft);
-            Place(subtitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(47f, -60f), new Vector2(760f, 28f));
+            Place(_subtitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(47f, -60f), new Vector2(760f, 28f));
 
             var statusPanel = CreatePanel("Backend Status", header.transform, new Color(0.04f, 0.075f, 0.085f, 0.9f));
             Place(statusPanel.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-22f, 0f), new Vector2(344f, 46f));
@@ -236,14 +247,14 @@ namespace VirtualInspection
             var instructions = CreatePanel("Instructions", parent, new Color(0.025f, 0.045f, 0.055f, 0.91f));
             StretchBottom(instructions.rectTransform, 22f, 66f, 22f);
 
-            var controls = CreateText(
+            _controls = CreateText(
                 instructions.transform,
                 "Controls",
                 "W A S D  移动     ·     按住鼠标右键  转动视角     ·     鼠标左键  标记问题     ·     ESC  取消",
                 15,
                 new Color(0.74f, 0.83f, 0.87f),
                 TextAnchor.MiddleLeft);
-            Place(controls.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(22f, 0f), new Vector2(970f, 66f));
+            Place(_controls.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(22f, 0f), new Vector2(970f, 66f));
 
             var legend = CreateText(
                 instructions.transform,

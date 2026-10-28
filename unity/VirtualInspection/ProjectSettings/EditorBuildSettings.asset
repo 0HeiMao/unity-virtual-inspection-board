@@ -8,4 +8,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/InspectionScene.unity
     guid: 8a51d6ca70da4a61b8f9305a81a54c12
-  m_configObjects: {}
+  - enabled: 0
+    path: Assets/Scenes/ARSimulationScene.unity
+    guid: a19f2a97a2d44cc48a7d3080a3b0da6b
+  m_configObjects:
+    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 1c2fe90083390a145bd668b07465d81c, type: 2}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: c6e0f4433f31a8547a1c999ac680c710, type: 2}

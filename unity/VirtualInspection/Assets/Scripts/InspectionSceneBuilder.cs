@@ -17,6 +17,9 @@ namespace VirtualInspection
         private static Material _crate;
         private static Font _font;
 
+        private const string ZoneInspection = "A 区 · 设备巡检";
+        private const string ZoneCooling = "B 区 · 冷却系统";
+
         public static Camera Build(out InspectionCameraController controller)
         {
             _font = RuntimeFonts.Get();
@@ -38,7 +41,7 @@ namespace VirtualInspection
                 new Vector3(16f, 0.3f, 14f),
                 _floor,
                 true);
-            AddSurface(floor, "机房地面");
+            AddSurface(floor, "机房地面", ZoneInspection);
 
             var backWall = CreateBox(
                 "Back Wall",
@@ -47,7 +50,7 @@ namespace VirtualInspection
                 new Vector3(16f, 6.2f, 0.25f),
                 _wall,
                 true);
-            AddSurface(backWall, "北侧墙面");
+            AddSurface(backWall, "北侧墙面", ZoneInspection);
 
             var leftWall = CreateBox(
                 "Left Wall",
@@ -56,7 +59,7 @@ namespace VirtualInspection
                 new Vector3(0.25f, 6.2f, 14f),
                 _wall,
                 true);
-            AddSurface(leftWall, "西侧墙面");
+            AddSurface(leftWall, "西侧墙面", ZoneInspection);
 
             var rightWall = CreateBox(
                 "Right Wall",
@@ -65,7 +68,7 @@ namespace VirtualInspection
                 new Vector3(0.25f, 6.2f, 14f),
                 _wall,
                 true);
-            AddSurface(rightWall, "东侧墙面");
+            AddSurface(rightWall, "东侧墙面", ZoneInspection);
 
             for (var x = -7f; x <= 7f; x += 2f)
             {
@@ -126,7 +129,7 @@ namespace VirtualInspection
             pipe.transform.localScale = new Vector3(0.17f, 5.9f, 0.17f);
             pipe.transform.rotation = Quaternion.Euler(0f, 0f, 90f);
             SetMaterial(pipe, _pipe);
-            AddSurface(pipe, "冷却管线");
+            AddSurface(pipe, "冷却管线", ZoneCooling);
 
             for (var index = 0; index < 7; index++)
             {
@@ -147,7 +150,7 @@ namespace VirtualInspection
                 new Vector3(3.2f, 1.3f, 1.0f),
                 _cabinet,
                 true);
-            AddSurface(console, "控制台");
+            AddSurface(console, "控制台", ZoneInspection);
 
             var consoleTop = CreateBox(
                 "Console Screen",
@@ -201,7 +204,7 @@ namespace VirtualInspection
                 new Vector3(2.15f, 3.1f, 1.25f),
                 _cabinet,
                 true);
-            AddSurface(cabinet, displayName);
+            AddSurface(cabinet, displayName, ZoneInspection);
 
             var frontPanel = CreateBox(
                 "Front Panel",
@@ -401,9 +404,9 @@ namespace VirtualInspection
             labelObject.GetComponent<MeshRenderer>().sharedMaterial = _font.material;
         }
 
-        private static void AddSurface(GameObject target, string displayName)
+        private static void AddSurface(GameObject target, string displayName, string area)
         {
-            target.AddComponent<InspectableSurface>().Configure(displayName);
+            target.AddComponent<InspectableSurface>().Configure(displayName, area);
         }
 
         private static void SetMaterial(GameObject target, Material material)
