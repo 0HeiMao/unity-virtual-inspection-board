@@ -27,10 +27,15 @@ func TestNormalizeTrimsText(t *testing.T) {
 		Title:       "  温度异常  ",
 		Description: "  右侧偏高  ",
 		Priority:    " high ",
+		Area:        "  A 区 · 设备巡检 ",
+		Asset:       "  1 号机柜  ",
 	}
 	request.Normalize()
 
 	if request.Title != "温度异常" || request.Description != "右侧偏高" || request.Priority != PriorityHigh {
 		t.Fatalf("unexpected normalized request: %+v", request)
+	}
+	if request.Area != "A 区 · 设备巡检" || request.Asset != "1 号机柜" {
+		t.Fatalf("ownership fields were not trimmed: %+v", request)
 	}
 }

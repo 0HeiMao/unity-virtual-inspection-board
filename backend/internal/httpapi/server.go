@@ -26,6 +26,8 @@ func New(issues *store.JSONStore, logger *log.Logger) http.Handler {
 	mux.HandleFunc("GET /api/issues", server.handleListIssues)
 	mux.HandleFunc("POST /api/issues", server.handleCreateIssue)
 	mux.HandleFunc("PATCH /api/issues/{id}/status", server.handleUpdateStatus)
+	mux.HandleFunc("DELETE /api/issues/{id}", server.handleDeleteIssue)
+	mux.HandleFunc("POST /api/issues/{id}/restore", server.handleRestoreIssue)
 	return withCORS(withRequestLog(mux, logger))
 }
 
@@ -36,8 +38,17 @@ func (server *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) 
 	})
 }
 
-func (server *Server) handleListIssues(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, map[string]any{"issues": server.issues.List()})
+// handleListIssues 默认只返回巡检队列里的问题；?deleted=1 返回回收站（已归档）里的问题。
+func (server *Server) handleListIssues(writer http.ResponseWriter, request *http.Request) {
+	wantDeleted := request.URL.Query().Get("deleted") == "1"
+	all := server.issues.List()
+	issues := make([]model.Issue, 0, len(all))
+	for _, issue := range all {
+		if (issue.DeletedAt != "") == wantDeleted {
+			issues = append(issues, issue)
+		}
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"issues": issues})
 }
 
 func (server *Server) handleCreateIssue(writer http.ResponseWriter, request *http.Request) {
@@ -61,6 +72,14 @@ func (server *Server) handleCreateIssue(writer http.ResponseWriter, request *htt
 	}
 	if len([]rune(input.Description)) > 2000 {
 		writeError(writer, http.StatusBadRequest, "description 不能超过 2000 个字符")
+		return
+	}
+	if len([]rune(input.Area)) > model.MaxAreaLength {
+		writeError(writer, http.StatusBadRequest, "area 不能超过 64 个字符")
+		return
+	}
+	if len([]rune(input.Asset)) > model.MaxAssetLength {
+		writeError(writer, http.StatusBadRequest, "asset 不能超过 64 个字符")
 		return
 	}
 
@@ -98,6 +117,32 @@ func (server *Server) handleUpdateStatus(writer http.ResponseWriter, request *ht
 	writeJSON(writer, http.StatusOK, issue)
 }
 
+func (server *Server) handleDeleteIssue(writer http.ResponseWriter, request *http.Request) {
+	if err := server.issues.Delete(request.PathValue("id")); errors.Is(err, store.ErrNotFound) {
+		writeError(writer, http.StatusNotFound, "问题不存在")
+		return
+	} else if err != nil {
+		server.logger.Printf("delete issue: %v", err)
+		writeError(writer, http.StatusInternalServerError, "删除问题失败")
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (server *Server) handleRestoreIssue(writer http.ResponseWriter, request *http.Request) {
+	issue, err := server.issues.Restore(request.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(writer, http.StatusNotFound, "问题不存在")
+		return
+	}
+	if err != nil {
+		server.logger.Printf("restore issue: %v", err)
+		writeError(writer, http.StatusInternalServerError, "恢复问题失败")
+		return
+	}
+	writeJSON(writer, http.StatusOK, issue)
+}
+
 func decodeJSON(writer http.ResponseWriter, request *http.Request, target any) error {
 	request.Body = http.MaxBytesReader(writer, request.Body, 1<<20)
 	decoder := json.NewDecoder(request.Body)
@@ -129,7 +174,7 @@ func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Access-Control-Allow-Origin", "*")
 		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		if request.Method == http.MethodOptions {
 			writer.WriteHeader(http.StatusNoContent)
 			return

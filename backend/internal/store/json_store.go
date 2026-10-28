@@ -43,6 +43,7 @@ func OpenJSON(path string) (*JSONStore, error) {
 	return store, nil
 }
 
+// List 返回全部问题（含已归档），顺序为最新在前；是否过滤归档由调用方决定。
 func (store *JSONStore) List() []model.Issue {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
@@ -65,6 +66,8 @@ func (store *JSONStore) Create(request model.CreateIssueRequest) (model.Issue, e
 		Description: request.Description,
 		Priority:    request.Priority,
 		Status:      model.StatusOpen,
+		Area:        request.Area,
+		Asset:       request.Asset,
 		Position:    request.Position,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -85,8 +88,55 @@ func (store *JSONStore) UpdateStatus(id, status string) (model.Issue, error) {
 		if store.issues[index].ID != id {
 			continue
 		}
+		if store.issues[index].DeletedAt != "" {
+			// 已归档的问题不在巡检队列里，状态更新等同于问题不存在。
+			return model.Issue{}, ErrNotFound
+		}
 		previous := store.issues[index]
 		store.issues[index].Status = status
+		store.issues[index].UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		if err := store.saveLocked(); err != nil {
+			store.issues[index] = previous
+			return model.Issue{}, err
+		}
+		return store.issues[index], nil
+	}
+	return model.Issue{}, ErrNotFound
+}
+
+// Delete 把指定问题归档（软删除）；未知 ID 返回 ErrNotFound，落盘失败时回滚内存状态。
+func (store *JSONStore) Delete(id string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	for index := range store.issues {
+		if store.issues[index].ID != id {
+			continue
+		}
+		previous := store.issues[index]
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		store.issues[index].DeletedAt = now
+		store.issues[index].UpdatedAt = now
+		if err := store.saveLocked(); err != nil {
+			store.issues[index] = previous
+			return err
+		}
+		return nil
+	}
+	return ErrNotFound
+}
+
+// Restore 把已归档的问题恢复到巡检队列；未知 ID 返回 ErrNotFound，落盘失败时回滚内存状态。
+func (store *JSONStore) Restore(id string) (model.Issue, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	for index := range store.issues {
+		if store.issues[index].ID != id {
+			continue
+		}
+		previous := store.issues[index]
+		store.issues[index].DeletedAt = ""
 		store.issues[index].UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		if err := store.saveLocked(); err != nil {
 			store.issues[index] = previous

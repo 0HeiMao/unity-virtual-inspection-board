@@ -5,6 +5,8 @@
     "description": "机柜右侧温度明显偏高，面板指示灯闪烁。",
     "priority": "high",
     "status": "open",
+    "area": "A 区 · 设备巡检",
+    "asset": "1 号机柜",
     "position": {
       "x": 1.25,
       "y": 1.48,
@@ -19,6 +21,8 @@
     "description": "北侧管线下方出现少量水迹，建议尽快检查密封圈。",
     "priority": "medium",
     "status": "in_progress",
+    "area": "B 区 · 冷却系统",
+    "asset": "冷却管线",
     "position": {
       "x": -2.1,
       "y": 4.55,
@@ -33,13 +37,15 @@
     "description": "控制台下方线缆交叉，需要按区域重新绑扎。",
     "priority": "low",
     "status": "open",
+    "area": "A 区 · 设备巡检",
+    "asset": "控制台",
     "position": {
       "x": -0.85,
       "y": 0.55,
       "z": -1.1
     },
     "createdAt": "2026-10-27T09:39:37.5810097Z",
-    "updatedAt": "2026-10-27T09:39:37.5810097Z"
+    "updatedAt": "2026-10-28T02:25:54.6601485Z"
   },
   {
     "id": "af0ab3a9-8f67-4cf0-8467-21103d95ded9",
@@ -47,6 +53,8 @@
     "description": "顶部风机出现周期性异响，需要停机检查轴承。",
     "priority": "high",
     "status": "open",
+    "area": "A 区 · 设备巡检",
+    "asset": "2 号机柜",
     "position": {
       "x": -0.19017116725444794,
       "y": 2.298583507537842,
@@ -61,6 +69,8 @@
     "description": "机柜顶部状态灯完全熄灭，现场暂未发现跳闸。",
     "priority": "high",
     "status": "resolved",
+    "area": "A 区 · 设备巡检",
+    "asset": "3 号机柜",
     "position": {
       "x": 0.23041489720344543,
       "y": 2.298696279525757,

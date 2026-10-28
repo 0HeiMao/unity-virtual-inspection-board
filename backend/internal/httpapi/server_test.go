@@ -3,11 +3,13 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"inspection-board/backend/internal/model"
@@ -96,6 +98,95 @@ func TestValidationErrorsAreExplicit(t *testing.T) {
 
 	invalidStatus := perform(handler, http.MethodPatch, "/api/issues/missing/status", `{"status":"closed"}`)
 	assertError(t, invalidStatus, http.StatusBadRequest, "status 必须是 open、in_progress 或 resolved")
+
+	tooLongArea := perform(handler, http.MethodPost, "/api/issues", fmt.Sprintf(`{
+		"title": "测试",
+		"priority": "low",
+		"area": %q,
+		"position": {"x": 0, "y": 0, "z": 0}
+	}`, strings.Repeat("区", model.MaxAreaLength+1)))
+	assertError(t, tooLongArea, http.StatusBadRequest, "area 不能超过 64 个字符")
+}
+
+func TestCreateKeepsOwnershipAndArchiveRestoresIssue(t *testing.T) {
+	dataPath := filepath.Join(t.TempDir(), "issues.json")
+	issues, err := store.OpenJSON(dataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(issues, log.New(io.Discard, "", 0))
+
+	createResponse := perform(handler, http.MethodPost, "/api/issues", `{
+		"title": "2 号机柜风扇异响",
+		"priority": "medium",
+		"area": " A 区 · 设备巡检 ",
+		"asset": " 2 号机柜 ",
+		"position": {"x": 0.5, "y": 1.2, "z": 4.4}
+	}`)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", createResponse.Code, createResponse.Body.String())
+	}
+	var created model.Issue
+	decodeResponse(t, createResponse, &created)
+	if created.Area != "A 区 · 设备巡检" || created.Asset != "2 号机柜" {
+		t.Fatalf("ownership fields were not trimmed or stored: %+v", created)
+	}
+
+	deleteResponse := perform(handler, http.MethodDelete, "/api/issues/"+created.ID, "")
+	if deleteResponse.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", deleteResponse.Code, deleteResponse.Body.String())
+	}
+
+	// 归档后不再出现在巡检队列，但会出现在回收站里。
+	active := listIssues(t, handler, "/api/issues")
+	if len(active) != 0 {
+		t.Fatalf("archived issue still listed as active: %+v", active)
+	}
+	archived := listIssues(t, handler, "/api/issues?deleted=1")
+	if len(archived) != 1 || archived[0].ID != created.ID || archived[0].DeletedAt == "" {
+		t.Fatalf("archived issue missing from recycle bin: %+v", archived)
+	}
+
+	// 已归档的问题不允许再改状态。
+	statusAfterArchive := perform(handler, http.MethodPatch, "/api/issues/"+created.ID+"/status", `{"status":"resolved"}`)
+	assertError(t, statusAfterArchive, http.StatusNotFound, "问题不存在")
+
+	reloaded, err := store.OpenJSON(dataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.List()) != 1 {
+		t.Fatalf("archived issue should still be persisted for restore: %+v", reloaded.List())
+	}
+
+	restoreResponse := perform(handler, http.MethodPost, "/api/issues/"+created.ID+"/restore", "")
+	if restoreResponse.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", restoreResponse.Code, restoreResponse.Body.String())
+	}
+	var restored model.Issue
+	decodeResponse(t, restoreResponse, &restored)
+	if restored.ID != created.ID || restored.DeletedAt != "" {
+		t.Fatalf("restore did not clear deletedAt: %+v", restored)
+	}
+	if active := listIssues(t, handler, "/api/issues"); len(active) != 1 {
+		t.Fatalf("restored issue missing from active list: %+v", active)
+	}
+
+	missing := perform(handler, http.MethodPost, "/api/issues/missing/restore", "")
+	assertError(t, missing, http.StatusNotFound, "问题不存在")
+}
+
+func listIssues(t *testing.T, handler http.Handler, path string) []model.Issue {
+	t.Helper()
+	response := perform(handler, http.MethodGet, path, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200 from %s, got %d: %s", path, response.Code, response.Body.String())
+	}
+	var payload struct {
+		Issues []model.Issue `json:"issues"`
+	}
+	decodeResponse(t, response, &payload)
+	return payload.Issues
 }
 
 func TestHealthAndCORS(t *testing.T) {
