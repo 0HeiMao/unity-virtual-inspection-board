@@ -1,0 +1,23 @@
+# 只有 backend/、frontend/、deploy/ 会进构建上下文，其余全部排除，避免把 Unity 工程和视频塞进构建缓存。
+.git
+.gitignore
+README.md
+AI_LOG.md
+docs/
+demos/
+scripts/
+unity/
+.tools/
+docker-compose.yml
+
+# 依赖与产物
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+backend/data/.issues-*.tmp
+backend/*.exe
+
+# 本地环境
+.env
+.env.*
+!.env.example

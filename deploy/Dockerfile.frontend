@@ -1,0 +1,18 @@
+# React 管理端镜像：Vite 构建产物交给 nginx 托管，/api 与 /health 反向代理到 Go 服务。
+#   docker build -f deploy/Dockerfile.frontend -t inspection-web .
+FROM node:24-alpine AS build
+
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+# 容器内走 nginx 同源反向代理，因此不注入 VITE_API_BASE_URL，前端用默认的 /api。
+RUN npm run build
+
+FROM nginx:1.27-alpine
+
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
